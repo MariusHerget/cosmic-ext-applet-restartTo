@@ -1,24 +1,14 @@
 // SPDX-License-Identifier: MPL-2.0
 
-use efibootnext::{BootEntry, BootEntryId};
+use efibootnext::Adapter;
 use std::fmt;
 
 /// Represents an EFI boot entry with its ID and description
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BootEntryInfo {
-    pub id: BootEntryId,
+    pub id: u16,
     pub description: String,
     pub active: bool,
-}
-
-impl From<BootEntry> for BootEntryInfo {
-    fn from(entry: BootEntry) -> Self {
-        BootEntryInfo {
-            id: entry.id,
-            description: entry.description,
-            active: entry.active,
-        }
-    }
 }
 
 impl fmt::Display for BootEntryInfo {
@@ -29,15 +19,30 @@ impl fmt::Display for BootEntryInfo {
 
 /// Get all available EFI boot entries
 pub fn get_boot_entries() -> Result<Vec<BootEntryInfo>, String> {
-    let entries = efibootnext::list_boot_entries()
+    let mut adapter = Adapter::default();
+    let entries = adapter
+        .load_options()
         .map_err(|e| format!("Failed to list boot entries: {}", e))?;
 
-    Ok(entries.into_iter().map(BootEntryInfo::from).collect())
+    Ok(entries
+        .into_iter()
+        .filter_map(|entry_result| {
+            entry_result
+                .map(|entry| BootEntryInfo {
+                    id: entry.number,
+                    description: entry.description,
+                    active: true, // LoadOption doesn't expose active status
+                })
+                .ok()
+        })
+        .collect())
 }
 
 /// Set the BootNext EFI variable to boot into a specific entry on next reboot
-pub fn set_boot_next(entry_id: BootEntryId) -> Result<(), String> {
-    efibootnext::set_boot_next(entry_id)
+pub fn set_boot_next(entry_id: u16) -> Result<(), String> {
+    let mut adapter = Adapter::default();
+    adapter
+        .set_boot_next(entry_id)
         .map_err(|e| format!("Failed to set BootNext: {}", e))?;
     Ok(())
 }

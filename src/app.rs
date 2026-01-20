@@ -79,7 +79,7 @@ impl cosmic::Application for AppModel {
         _flags: Self::Flags,
     ) -> (Self, Task<cosmic::Action<Self::Message>>) {
         // Construct the app model with the runtime's core.
-        let mut app = AppModel {
+        let app = AppModel {
             core,
             config: cosmic_config::Config::new(Self::APP_ID, Config::VERSION)
                 .map(|context| match Config::get_entry(&context) {
@@ -97,7 +97,10 @@ impl cosmic::Application for AppModel {
         };
 
         // Load boot entries on initialization
-        (app, Task::single(cosmic::Action::Message(Message::LoadBootEntries)))
+        (app, Task::perform(
+            async { Message::LoadBootEntries },
+            cosmic::Action::App,
+        ))
     }
 
     fn on_close_requested(&self, id: Id) -> Option<Message> {
@@ -123,7 +126,26 @@ impl cosmic::Application for AppModel {
     fn view_window(&self, _id: Id) -> Element<'_, Self::Message> {
         // Show confirmation dialog if an entry is selected
         if let Some(ref entry) = self.selected_entry {
-            return self.view_confirmation_dialog(entry);
+            let dialog_content = widget::column()
+                .spacing(16)
+                .padding(24)
+                .push(
+                    widget::text(fl!("confirm-restart", entry = entry.description.as_str()))
+                        .size(16),
+                )
+                .push(
+                    widget::row()
+                        .spacing(8)
+                        .push(
+                            widget::button::standard(fl!("cancel-button"))
+                                .on_press(Message::CancelReboot),
+                        )
+                        .push(
+                            widget::button::suggested(fl!("restart-button"))
+                                .on_press(Message::ConfirmReboot),
+                        ),
+                );
+            return self.core.applet.popup_container(dialog_content).into();
         }
 
         let content_list = widget::list_column()
@@ -164,31 +186,6 @@ impl cosmic::Application for AppModel {
         };
 
         self.core.applet.popup_container(content_list).into()
-    }
-
-    /// Show confirmation dialog for rebooting to a specific boot entry
-    fn view_confirmation_dialog(&self, entry: &BootEntryInfo) -> Element<'_, Self::Message> {
-        let dialog_content = widget::column()
-            .spacing(16)
-            .padding(24)
-            .push(
-                widget::text(fl!("confirm-restart", entry = entry.description.as_str()))
-                    .size(16),
-            )
-            .push(
-                widget::row()
-                    .spacing(8)
-                    .push(
-                        widget::button::standard(fl!("cancel-button"))
-                            .on_press(Message::CancelReboot),
-                    )
-                    .push(
-                        widget::button::suggested(fl!("restart-button"))
-                            .on_press(Message::ConfirmReboot),
-                    ),
-            );
-
-        self.core.applet.popup_container(dialog_content).into()
     }
 
     /// Register subscriptions for this application.
@@ -239,9 +236,10 @@ impl cosmic::Application for AppModel {
             Message::LoadBootEntries => {
                 self.loading_entries = true;
                 self.error_message = None;
-                return Task::single(cosmic::Action::Message(Message::BootEntriesLoaded(
-                    crate::boot::get_boot_entries(),
-                )));
+                return Task::perform(
+                    async { crate::boot::get_boot_entries() },
+                    |result| cosmic::Action::App(Message::BootEntriesLoaded(result)),
+                );
             }
             Message::BootEntriesLoaded(result) => {
                 self.loading_entries = false;
@@ -266,14 +264,17 @@ impl cosmic::Application for AppModel {
                     match crate::boot::set_boot_next(entry_id) {
                         Ok(()) => {
                             // Spawn async task to reboot
-                            return Task::future(async move {
-                                match crate::boot::reboot_system().await {
-                                    Ok(()) => cosmic::Action::Message(Message::TogglePopup),
-                                    Err(e) => cosmic::Action::Message(Message::RebootError(
+                            return Task::perform(
+                                async move {
+                                    crate::boot::reboot_system().await
+                                },
+                                |result| match result {
+                                    Ok(()) => cosmic::Action::App(Message::TogglePopup),
+                                    Err(e) => cosmic::Action::App(Message::RebootError(
                                         format!("{}: {}", fl!("error-reboot"), e),
                                     )),
-                                }
-                            });
+                                },
+                            );
                         }
                         Err(e) => {
                             self.error_message = Some(format!("{}: {}", fl!("error-reboot"), e));
@@ -314,7 +315,10 @@ impl cosmic::Application for AppModel {
                     if self.boot_entries.is_empty() && !self.loading_entries {
                         return Task::batch(vec![
                             get_popup(popup_settings),
-                            Task::single(cosmic::Action::Message(Message::LoadBootEntries)),
+                            Task::perform(
+                                async { Message::LoadBootEntries },
+                                cosmic::Action::App,
+                            ),
                         ]);
                     }
                     get_popup(popup_settings)
