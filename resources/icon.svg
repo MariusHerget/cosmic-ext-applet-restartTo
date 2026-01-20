@@ -1,2 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg"/>
+<svg viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+  <!-- Reboot/Restart icon - circular arrow -->
+  <circle cx="64" cy="64" r="56" fill="none" stroke="currentColor" stroke-width="8"/>
+  <path d="M 64 20 L 64 40 M 64 88 L 64 108 M 44 64 L 24 64 M 84 64 L 104 64 M 44 44 L 28 28 M 84 84 L 100 100 M 84 44 L 100 28 M 44 84 L 28 100" 
+        stroke="currentColor" stroke-width="6" stroke-linecap="round"/>
+  <!-- Circular arrow indicating reboot -->
+  <path d="M 80 48 Q 96 64 80 80" 
+        fill="none" stroke="currentColor" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M 75 70 L 80 80 L 85 70" 
+        fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

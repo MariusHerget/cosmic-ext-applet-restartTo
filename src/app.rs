@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MPL-2.0
 
+use crate::boot::BootEntryInfo;
 use crate::config::Config;
 use crate::fl;
 use cosmic::cosmic_config::{self, CosmicConfigEntry};
@@ -19,8 +20,14 @@ pub struct AppModel {
     popup: Option<Id>,
     /// Configuration data that persists between application runs.
     config: Config,
-    /// Example row toggler.
-    example_row: bool,
+    /// Cached boot entries.
+    boot_entries: Vec<BootEntryInfo>,
+    /// Entry pending confirmation for reboot.
+    selected_entry: Option<BootEntryInfo>,
+    /// Loading state indicator.
+    loading_entries: bool,
+    /// Error message to display.
+    error_message: Option<String>,
 }
 
 /// Messages emitted by the application and its widgets.
@@ -30,7 +37,18 @@ pub enum Message {
     PopupClosed(Id),
     SubscriptionChannel,
     UpdateConfig(Config),
-    ToggleExampleRow(bool),
+    /// Trigger boot entry discovery.
+    LoadBootEntries,
+    /// Receive loaded boot entries.
+    BootEntriesLoaded(Result<Vec<BootEntryInfo>, String>),
+    /// User selected a boot entry.
+    SelectBootEntry(BootEntryInfo),
+    /// User confirmed reboot dialog.
+    ConfirmReboot,
+    /// User cancelled reboot dialog.
+    CancelReboot,
+    /// Handle reboot errors.
+    RebootError(String),
 }
 
 /// Create a COSMIC application from the app model
@@ -61,7 +79,7 @@ impl cosmic::Application for AppModel {
         _flags: Self::Flags,
     ) -> (Self, Task<cosmic::Action<Self::Message>>) {
         // Construct the app model with the runtime's core.
-        let app = AppModel {
+        let mut app = AppModel {
             core,
             config: cosmic_config::Config::new(Self::APP_ID, Config::VERSION)
                 .map(|context| match Config::get_entry(&context) {
@@ -78,7 +96,8 @@ impl cosmic::Application for AppModel {
             ..Default::default()
         };
 
-        (app, Task::none())
+        // Load boot entries on initialization
+        (app, Task::single(cosmic::Action::Message(Message::LoadBootEntries)))
     }
 
     fn on_close_requested(&self, id: Id) -> Option<Message> {
@@ -93,7 +112,7 @@ impl cosmic::Application for AppModel {
     fn view(&self) -> Element<'_, Self::Message> {
         self.core
             .applet
-            .icon_button("display-symbolic")
+            .icon_button("system-reboot-symbolic")
             .on_press(Message::TogglePopup)
             .into()
     }
@@ -102,15 +121,74 @@ impl cosmic::Application for AppModel {
     /// multiple poups, you may match the id parameter to determine which popup to
     /// create a view for.
     fn view_window(&self, _id: Id) -> Element<'_, Self::Message> {
+        // Show confirmation dialog if an entry is selected
+        if let Some(ref entry) = self.selected_entry {
+            return self.view_confirmation_dialog(entry);
+        }
+
         let content_list = widget::list_column()
             .padding(5)
-            .spacing(0)
-            .add(widget::settings::item(
-                fl!("example-row"),
-                widget::toggler(self.example_row).on_toggle(Message::ToggleExampleRow),
-            ));
+            .spacing(0);
+
+        let content_list = if self.loading_entries {
+            content_list.add(
+                widget::settings::item(
+                    fl!("loading-entries"),
+                    widget::text(""),
+                ),
+            )
+        } else if let Some(ref error) = self.error_message {
+            content_list.add(
+                widget::settings::item(
+                    fl!("error-loading"),
+                    widget::text(error),
+                ),
+            )
+        } else if self.boot_entries.is_empty() {
+            content_list.add(
+                widget::settings::item(
+                    fl!("no-boot-entries"),
+                    widget::text(""),
+                ),
+            )
+        } else {
+            let mut list = content_list;
+            for entry in &self.boot_entries {
+                let entry_clone = entry.clone();
+                list = list.add(
+                    widget::button::text(&entry.description)
+                        .on_press(Message::SelectBootEntry(entry_clone)),
+                );
+            }
+            list
+        };
 
         self.core.applet.popup_container(content_list).into()
+    }
+
+    /// Show confirmation dialog for rebooting to a specific boot entry
+    fn view_confirmation_dialog(&self, entry: &BootEntryInfo) -> Element<'_, Self::Message> {
+        let dialog_content = widget::column()
+            .spacing(16)
+            .padding(24)
+            .push(
+                widget::text(fl!("confirm-restart", entry = entry.description.as_str()))
+                    .size(16),
+            )
+            .push(
+                widget::row()
+                    .spacing(8)
+                    .push(
+                        widget::button::standard(fl!("cancel-button"))
+                            .on_press(Message::CancelReboot),
+                    )
+                    .push(
+                        widget::button::suggested(fl!("restart-button"))
+                            .on_press(Message::ConfirmReboot),
+                    ),
+            );
+
+        self.core.applet.popup_container(dialog_content).into()
     }
 
     /// Register subscriptions for this application.
@@ -158,11 +236,66 @@ impl cosmic::Application for AppModel {
             Message::UpdateConfig(config) => {
                 self.config = config;
             }
-            Message::ToggleExampleRow(toggled) => self.example_row = toggled,
+            Message::LoadBootEntries => {
+                self.loading_entries = true;
+                self.error_message = None;
+                return Task::single(cosmic::Action::Message(Message::BootEntriesLoaded(
+                    crate::boot::get_boot_entries(),
+                )));
+            }
+            Message::BootEntriesLoaded(result) => {
+                self.loading_entries = false;
+                match result {
+                    Ok(entries) => {
+                        self.boot_entries = entries;
+                        self.error_message = None;
+                    }
+                    Err(e) => {
+                        self.error_message = Some(e);
+                        self.boot_entries.clear();
+                    }
+                }
+            }
+            Message::SelectBootEntry(entry) => {
+                self.selected_entry = Some(entry);
+            }
+            Message::ConfirmReboot => {
+                if let Some(ref entry) = self.selected_entry {
+                    let entry_id = entry.id;
+                    // Set BootNext and reboot
+                    match crate::boot::set_boot_next(entry_id) {
+                        Ok(()) => {
+                            // Spawn async task to reboot
+                            return Task::future(async move {
+                                match crate::boot::reboot_system().await {
+                                    Ok(()) => cosmic::Action::Message(Message::TogglePopup),
+                                    Err(e) => cosmic::Action::Message(Message::RebootError(
+                                        format!("{}: {}", fl!("error-reboot"), e),
+                                    )),
+                                }
+                            });
+                        }
+                        Err(e) => {
+                            self.error_message = Some(format!("{}: {}", fl!("error-reboot"), e));
+                            self.selected_entry = None;
+                        }
+                    }
+                }
+            }
+            Message::CancelReboot => {
+                self.selected_entry = None;
+            }
+            Message::RebootError(error) => {
+                self.error_message = Some(error);
+                self.selected_entry = None;
+            }
             Message::TogglePopup => {
                 return if let Some(p) = self.popup.take() {
+                    // Close popup and clear selection
+                    self.selected_entry = None;
                     destroy_popup(p)
                 } else {
+                    // Open popup and load boot entries if not already loaded
                     let new_id = Id::unique();
                     self.popup.replace(new_id);
                     let mut popup_settings = self.core.applet.get_popup_settings(
@@ -177,12 +310,20 @@ impl cosmic::Application for AppModel {
                         .min_width(300.0)
                         .min_height(200.0)
                         .max_height(1080.0);
+                    // Load boot entries when opening popup
+                    if self.boot_entries.is_empty() && !self.loading_entries {
+                        return Task::batch(vec![
+                            get_popup(popup_settings),
+                            Task::single(cosmic::Action::Message(Message::LoadBootEntries)),
+                        ]);
+                    }
                     get_popup(popup_settings)
                 }
             }
             Message::PopupClosed(id) => {
                 if self.popup.as_ref() == Some(&id) {
                     self.popup = None;
+                    self.selected_entry = None;
                 }
             }
         }
