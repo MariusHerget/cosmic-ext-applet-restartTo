@@ -191,9 +191,13 @@ RUST_BACKTRACE=full RUST_LOG=debug just run
    - May need root permissions or polkit policies
 
 3. **Permission denied errors**:
-   - EFI variable access typically requires root or proper polkit policies
-   - Check if `efibootmgr` works: `sudo efibootmgr`
-   - May need to configure polkit rules (see Permissions section)
+   - **Error message**: "Permission denied: EFI variable access requires elevated privileges"
+   - **Cause**: Setting BootNext EFI variable requires root privileges
+   - **Solutions**:
+     - **Option 1 (Recommended)**: Create a polkit policy (see Permissions section below)
+     - **Option 2**: Test with `sudo efibootmgr -n <entry>` to verify EFI access works
+     - **Option 3**: Add user to a group with EFI access (if configured on your system)
+   - The applet will display a helpful error message with instructions when this occurs
 
 4. **Build errors**:
    - Ensure all dependencies are installed
@@ -202,34 +206,68 @@ RUST_BACKTRACE=full RUST_LOG=debug just run
 
 ### Permissions
 
-The applet needs access to EFI variables, which typically requires elevated privileges. Options:
+The applet needs access to EFI variables, which typically requires elevated privileges. When you encounter a "Permission denied" error, here are your options:
 
-1. **Run with sudo** (not recommended for production):
-   - The applet would need to be launched with sudo, which is not ideal
+#### Option 1: Polkit Policy (Recommended)
 
-2. **Polkit policy** (recommended):
-   - Create a polkit policy file to allow EFI variable access
-   - Example policy (needs to be created):
-     ```xml
-     <?xml version="1.0" encoding="UTF-8"?>
-     <!DOCTYPE policyconfig PUBLIC
-       "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
-       "http://www.freedesktop.org/software/polkit/policyconfig-1.dtd">
-     <policyconfig>
-       <action id="com.github.cosmic_ext.restartTo.manage-boot">
-         <description>Manage EFI boot entries</description>
-         <message>Authentication is required to manage boot entries</message>
-         <defaults>
-           <allow_any>auth_admin</allow_any>
-           <allow_inactive>auth_admin</allow_inactive>
-           <allow_active>auth_admin</allow_active>
-         </defaults>
-       </action>
-     </policyconfig>
-     ```
+Create a polkit policy file to allow EFI variable access without requiring sudo:
 
-3. **Group membership**:
-   - Add user to a group with EFI access (if configured on your system)
+1. **Create the policy file**:
+   ```bash
+   sudo nano /usr/share/polkit-1/actions/com.github.cosmic_ext.restartTo.policy
+   ```
+
+2. **Add the following content**:
+   ```xml
+   <?xml version="1.0" encoding="UTF-8"?>
+   <!DOCTYPE policyconfig PUBLIC
+     "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+     "http://www.freedesktop.org/software/polkit/policyconfig-1.dtd">
+   <policyconfig>
+     <action id="com.github.cosmic_ext.restartTo.manage-boot">
+       <description>Manage EFI boot entries for restart-to applet</description>
+       <message>Authentication is required to manage boot entries</message>
+       <defaults>
+         <allow_any>auth_admin</allow_any>
+         <allow_inactive>auth_admin</allow_inactive>
+         <allow_active>auth_admin</allow_active>
+       </defaults>
+     </action>
+   </policyconfig>
+   ```
+
+3. **Note**: This policy alone may not be sufficient. The applet also needs to use polkit to request authorization. Currently, the applet uses direct EFI access which requires root. A future enhancement could integrate polkit authorization.
+
+#### Option 2: Test EFI Access
+
+Verify that EFI access works with root privileges:
+```bash
+# List boot entries
+sudo efibootmgr -v
+
+# Test setting BootNext (replace 0001 with your boot entry ID)
+sudo efibootmgr -n 0001
+
+# Verify it was set
+sudo efibootmgr -v
+```
+
+#### Option 3: Group Membership (If Available)
+
+Some systems configure group-based EFI access. Check if your distribution provides this:
+```bash
+# Check EFI variable permissions
+ls -la /sys/firmware/efi/efivars/ | head
+
+# Check if there's an EFI-related group
+groups
+```
+
+#### Current Limitation
+
+**Important**: The current implementation requires root privileges to set EFI variables. The applet will display a clear error message when permission is denied, guiding users to check the README for solutions.
+
+**Future Enhancement**: The applet could be enhanced to use polkit to request authorization interactively, similar to how `pkexec` works, but this requires additional integration work.
 
 ### Code Quality
 

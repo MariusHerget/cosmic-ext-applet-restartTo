@@ -43,7 +43,23 @@ pub fn set_boot_next(entry_id: u16) -> Result<(), String> {
     let mut adapter = Adapter::default();
     adapter
         .set_boot_next(entry_id)
-        .map_err(|e| format!("Failed to set BootNext: {}", e))?;
+        .map_err(|e| {
+            let error_msg = format!("{}", e);
+            // Check if it's a permission error
+            if error_msg.contains("permission denied") || error_msg.contains("Permission denied") {
+                format!(
+                    "Permission denied: EFI variable access requires elevated privileges.\n\n\
+                    Solutions:\n\
+                    1. Configure polkit policy (see README.md)\n\
+                    2. Run with sudo (not recommended)\n\
+                    3. Add user to appropriate group if configured\n\n\
+                    Original error: {}",
+                    error_msg
+                )
+            } else {
+                format!("Failed to set BootNext: {}", error_msg)
+            }
+        })?;
     Ok(())
 }
 

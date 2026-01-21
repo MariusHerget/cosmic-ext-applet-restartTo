@@ -130,7 +130,12 @@ impl cosmic::Application for AppModel {
                 .spacing(16)
                 .padding(24)
                 .push(
-                    widget::text(fl!("confirm-restart", entry = entry.description.as_str()))
+                    widget::text({
+                        use std::collections::HashMap;
+                        let mut args = HashMap::new();
+                        args.insert("entry", entry.description.as_str());
+                        fl!("confirm-restart", args)
+                    })
                         .size(16),
                 )
                 .push(
@@ -160,12 +165,30 @@ impl cosmic::Application for AppModel {
                 ),
             )
         } else if let Some(ref error) = self.error_message {
-            content_list.add(
-                widget::settings::item(
-                    fl!("error-loading"),
-                    widget::text(error),
-                ),
-            )
+            // Check if it's a permission error and format it better
+            if error.contains("Permission denied") || error.contains("permission denied") {
+                // For permission errors, show a more detailed message
+                content_list
+                    .add(
+                        widget::settings::item(
+                            fl!("error-permission"),
+                            widget::text(fl!("error-permission-details")),
+                        ),
+                    )
+                    .add(
+                        widget::column()
+                            .spacing(4)
+                            .padding([8, 16])
+                            .push(widget::text(error).size(10)),
+                    )
+            } else {
+                content_list.add(
+                    widget::settings::item(
+                        fl!("error-loading"),
+                        widget::text(error),
+                    ),
+                )
+            }
         } else if self.boot_entries.is_empty() {
             content_list.add(
                 widget::settings::item(
