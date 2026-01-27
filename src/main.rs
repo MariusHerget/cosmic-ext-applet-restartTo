@@ -3,6 +3,7 @@
 mod app;
 mod boot;
 mod config;
+mod icons;
 mod i18n;
 
 fn main() -> cosmic::iced::Result {

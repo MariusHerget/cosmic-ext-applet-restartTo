@@ -8,25 +8,22 @@
 # |   Human contact:                                        |
 # |     • Marius Herget  < code@mariusherget.de >           |
 # |                                                         |
-# |  📅  Date: 2026-01-21                                   |
+# |  📅  Date: 2026-01-27                                   |
 # |                                                         |
-# |  🛠  Build mission: "Operation: Polkit Permission Pass" |
-# |      Mission: Infiltrate the polkit authorization      |
-# |      fortress and integrate interactive privilege       |
-# |      elevation into the restart-to applet. Successfully |
-# |      integrated zbus_polkit to request authorization    |
-# |      via D-Bus, allowing users to authenticate with    |
-# |      their password instead of running the entire       |
-# |      applet as root. Created polkit policy file,        |
-# |      updated installation scripts, and transformed      |
-# |      the synchronous set_boot_next into an async        |
-# |      function that gracefully handles authorization     |
-# |      requests. The applet now prompts users for         |
-# |      authentication when needed, making it both more    |
-# |      secure and user-friendly. Mission status:          |
-# |      COMPLETE ✅ (polkit integration successful,        |
-# |      no more "permission denied" errors when policy     |
-# |      is properly installed)                             |
+# |  🛠  Build mission: "Operation: Regex Extermination"   |
+# |      Mission: Banish the regex demons from the codebase! |
+# |      After discovering that the regex-based SVG color   |
+# |      manipulation was causing theme integration failures,|
+# |      we embarked on a quest to use the proper API       |
+# |      methods. The simpleicons-rs crate's slug_colored() |
+# |      function was the key - it accepts "currentColor"   |
+# |      directly, making icons theme-aware without any      |
+# |      string manipulation! For Font Awesome, we switched |
+# |      to simple string replacement (no regex needed).    |
+# |      The regex crate has been completely removed, and    |
+# |      icons now properly integrate with the UI theme     |
+# |      using the official crate APIs. Mission status:     |
+# |      COMPLETE ✅ (regex banished, proper APIs used)    |
 # +---------------------------------------------------------+
 #
 # The development process involved iterative generation,

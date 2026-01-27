@@ -3,11 +3,13 @@
 use crate::boot::BootEntryInfo;
 use crate::config::Config;
 use crate::fl;
+use crate::icons;
 use cosmic::cosmic_config::{self, CosmicConfigEntry};
 use cosmic::iced::{window::Id, Limits, Subscription};
 use cosmic::iced_winit::commands::popup::{destroy_popup, get_popup};
 use cosmic::prelude::*;
 use cosmic::widget;
+use cosmic::theme;
 use futures_util::SinkExt;
 
 /// The application model stores app-specific state used to describe its interface and
@@ -20,6 +22,8 @@ pub struct AppModel {
     popup: Option<Id>,
     /// Configuration data that persists between application runs.
     config: Config,
+    /// Config context for saving changes.
+    config_context: Option<cosmic_config::Config>,
     /// Cached boot entries.
     boot_entries: Vec<BootEntryInfo>,
     /// Entry pending confirmation for reboot.
@@ -28,6 +32,8 @@ pub struct AppModel {
     loading_entries: bool,
     /// Error message to display.
     error_message: Option<String>,
+    /// Whether to show the settings view.
+    show_settings: bool,
 }
 
 /// Messages emitted by the application and its widgets.
@@ -49,6 +55,12 @@ pub enum Message {
     CancelReboot,
     /// Handle reboot errors.
     RebootError(String),
+    /// Open settings view.
+    OpenSettings,
+    /// Close settings view.
+    CloseSettings,
+    /// Toggle visibility of a boot entry.
+    ToggleEntryVisibility(u16),
 }
 
 /// Create a COSMIC application from the app model
@@ -79,10 +91,9 @@ impl cosmic::Application for AppModel {
         _flags: Self::Flags,
     ) -> (Self, Task<cosmic::Action<Self::Message>>) {
         // Construct the app model with the runtime's core.
-        let app = AppModel {
-            core,
-            config: cosmic_config::Config::new(Self::APP_ID, Config::VERSION)
-                .map(|context| match Config::get_entry(&context) {
+        let (config, config_context) = cosmic_config::Config::new(Self::APP_ID, Config::VERSION)
+            .map(|context| {
+                let config = match Config::get_entry(&context) {
                     Ok(config) => {
                         tracing::debug!("Successfully loaded app configuration");
                         config
@@ -94,11 +105,18 @@ impl cosmic::Application for AppModel {
                         tracing::warn!("Using default configuration due to errors");
                         config
                     }
-                })
-                .unwrap_or_else(|e| {
-                    tracing::error!(error = %e, "Failed to create config context, using defaults");
-                    Config::default()
-                }),
+                };
+                (config, Some(context))
+            })
+            .unwrap_or_else(|e| {
+                tracing::error!(error = %e, "Failed to create config context, using defaults");
+                (Config::default(), None)
+            });
+
+        let app = AppModel {
+            core,
+            config,
+            config_context,
             ..Default::default()
         };
 
@@ -160,6 +178,11 @@ impl cosmic::Application for AppModel {
             return self.core.applet.popup_container(dialog_content).into();
         }
 
+        // Show settings view if requested
+        if self.show_settings {
+            return self.view_settings().into();
+        }
+
         let content_list = widget::list_column()
             .padding(5)
             .spacing(0);
@@ -205,13 +228,52 @@ impl cosmic::Application for AppModel {
             )
         } else {
             let mut list = content_list;
+            // Filter entries based on visibility settings
             for entry in &self.boot_entries {
-                let entry_clone = entry.clone();
-                list = list.add(
-                    widget::button::text(&entry.description)
-                        .on_press(Message::SelectBootEntry(entry_clone)),
-                );
+                if self.config.is_entry_visible(entry.id) {
+                    let entry_clone = entry.clone();
+                    let icon_handle = icons::get_boot_entry_icon(&entry.description, &self.core);
+                    let entry_text = format!("{}", entry.description);
+                    let entry_text_clone = entry_text.clone();
+             
+                    list = list.add(
+                        widget::button::text(entry_text_clone)
+                            .leading_icon(icon_handle)
+                            .on_press(Message::SelectBootEntry(entry_clone))
+                            .spacing(12),
+                    );
+                }
             }
+            // Add settings button as last item
+            let settings_text = format!("{}", fl!("settings-button"));
+            let settings_text_clone = settings_text.clone();
+            // list = list.add(
+            //     widget::button::text(settings_text_clone)
+            //         .leading_icon(widget::icon::from_name("emblem-system-symbolic").size(16))
+            //         .class(theme::Button::HeaderBar)
+            //         .on_press(Message::OpenSettings)
+            //         .spacing(12),
+            // );
+            list = list.add(
+                widget::container(
+                    widget::tooltip(
+                        // 1. The actual button widget
+                        widget::button::icon(
+                            widget::icon::from_name("emblem-system-symbolic").size(16)
+                        )
+                        .on_press(Message::OpenSettings)
+                        .class(theme::Button::HeaderBar),
+                        
+                        // 2. The text to show on hover
+                        widget::text(settings_text_clone).size(14), 
+                        
+                        // 3. Where the tooltip should appear
+                        widget::tooltip::Position::Top,
+                    )
+                )
+                .width(cosmic::iced::Length::Fill)
+                .align_x(cosmic::iced::alignment::Alignment::End),
+            );
             list
         };
 
@@ -224,7 +286,7 @@ impl cosmic::Application for AppModel {
     /// emit messages to the application through a channel. They may be conditionally
     /// activated by selectively appending to the subscription batch, and will
     /// continue to execute for the duration that they remain in the batch.
-    fn subscription(&self) -> Subscription<Self::Message> {
+    fn subscription(&self) -> Subscription<<AppModel as cosmic::Application>::Message> {
         struct MySubscription;
 
         Subscription::batch(vec![
@@ -238,8 +300,8 @@ impl cosmic::Application for AppModel {
                 }),
             ),
             // Watch for application configuration changes.
-            self.core()
-                .watch_config::<Config>(Self::APP_ID)
+            <AppModel as cosmic::Application>::core(self)
+                .watch_config::<Config>(<AppModel as cosmic::Application>::APP_ID)
                 .map(|update| {
                     for why in &update.errors {
                         tracing::error!(%why, "app config error");
@@ -255,7 +317,7 @@ impl cosmic::Application for AppModel {
     /// Tasks may be returned for asynchronous execution of code in the background
     /// on the application's async runtime. The application will not exit until all
     /// tasks are finished.
-    fn update(&mut self, message: Self::Message) -> Task<cosmic::Action<Self::Message>> {
+    fn update(&mut self, message: <AppModel as cosmic::Application>::Message) -> Task<cosmic::Action<<AppModel as cosmic::Application>::Message>> {
         match message {
             Message::SubscriptionChannel => {
                 // For example purposes only.
@@ -342,6 +404,36 @@ impl cosmic::Application for AppModel {
                 self.error_message = Some(error);
                 self.selected_entry = None;
             }
+            Message::OpenSettings => {
+                tracing::debug!("Opening settings view");
+                self.show_settings = true;
+            }
+            Message::CloseSettings => {
+                tracing::debug!("Closing settings view");
+                self.show_settings = false;
+            }
+            Message::ToggleEntryVisibility(entry_id) => {
+                tracing::debug!(boot_entry_id = entry_id, "Toggling entry visibility");
+                self.config.toggle_entry_visibility(entry_id);
+                
+                // Save config immediately
+                if let Some(ref context) = self.config_context {
+                    if let Err(e) = self.config.write_entry(context) {
+                        tracing::error!(error = %e, "Failed to save config");
+                    } else {
+                        tracing::debug!("Config saved successfully");
+                    }
+                } else {
+                    // Try to create config context if it doesn't exist
+                    if let Ok(context) = cosmic_config::Config::new(<AppModel as cosmic::Application>::APP_ID, Config::VERSION) {
+                        if let Err(e) = self.config.write_entry(&context) {
+                            tracing::error!(error = %e, "Failed to save config");
+                        } else {
+                            tracing::debug!("Config saved successfully");
+                        }
+                    }
+                }
+            }
             Message::TogglePopup => {
                 return if let Some(p) = self.popup.take() {
                     // Close popup and clear selection
@@ -362,7 +454,7 @@ impl cosmic::Application for AppModel {
                     );
                     popup_settings.positioner.size_limits = Limits::NONE
                         .max_width(372.0)
-                        .min_width(300.0)
+                        .min_width(200.0)
                         .min_height(200.0)
                         .max_height(1080.0);
                     // Load boot entries when opening popup
@@ -384,6 +476,7 @@ impl cosmic::Application for AppModel {
                     tracing::debug!("Popup closed by user");
                     self.popup = None;
                     self.selected_entry = None;
+                    self.show_settings = false;
                 }
             }
         }
@@ -392,5 +485,59 @@ impl cosmic::Application for AppModel {
 
     fn style(&self) -> Option<cosmic::iced_runtime::Appearance> {
         Some(cosmic::applet::style())
+    }
+}
+
+impl AppModel {
+    /// Render the settings view
+    fn view_settings(&self) -> Element<'_, <AppModel as cosmic::Application>::Message> {
+        let content_list = widget::list_column()
+            .padding(5)
+            .spacing(0);
+
+        let mut list = content_list
+            .add(
+                widget::settings::item(
+                    fl!("settings-title"),
+                    widget::text(fl!("settings-description")),
+                ),
+            );
+
+        if self.boot_entries.is_empty() {
+            list = list.add(
+                widget::settings::item(
+                    fl!("no-boot-entries"),
+                    widget::text(""),
+                ),
+            );
+        } else {
+            for entry in &self.boot_entries {
+                let entry_id = entry.id;
+                let is_visible = self.config.is_entry_visible(entry_id);
+                
+                list = list.add(
+                    widget::settings::item(
+                        &entry.description,
+                        widget::row()
+                            .spacing(8)
+                            // .push(
+                            //     widget::icon::from_name(icons::get_boot_entry_icon(&entry.description)).size(16)
+                            // )
+                            .push(
+                                widget::toggler(is_visible)
+                                    .on_toggle(move |_| Message::ToggleEntryVisibility(entry_id)),
+                            ),
+                    ),
+                );
+            }
+        }
+
+        // Add back button
+        list = list.add(
+            widget::button::text(fl!("back-button"))
+                .on_press(Message::CloseSettings),
+        );
+
+        self.core.applet.popup_container(list).into()
     }
 }
