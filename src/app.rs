@@ -181,9 +181,6 @@ impl cosmic::Application for AppModel {
         }
 
         let content_list = widget::settings::section();
-        
-            // .padding([4, 2])
-            // .spacing(0);
 
         let content_list = if self.loading_entries {
             content_list.add(
@@ -227,12 +224,11 @@ impl cosmic::Application for AppModel {
         } else {
             let mut list = content_list;
             // Filter entries based on visibility settings
-            list = list.add(widget::text(fl!("settings-title")).size(16));
             for entry in &self.boot_entries {
                 if self.config.is_entry_visible(entry.id) {
                     let entry_clone = entry.clone();
                     let icon_handle = icons::get_boot_entry_icon(&entry.description, &self.core);
-             
+
                     list = list.add(
                         widget::button::text(entry.description.clone())
                             .leading_icon(icon_handle)
@@ -243,21 +239,15 @@ impl cosmic::Application for AppModel {
                 }
             }
             // Add settings button as last item
-            let settings_text = fl!("settings-button").to_string();
             list = list.add(
                 widget::container(
                     widget::tooltip(
-                        // 1. The actual button widget
                         widget::button::icon(
                             widget::icon::from_name("emblem-system-symbolic").size(16)
                         )
                         .on_press(Message::OpenSettings)
                         .class(theme::Button::HeaderBar),
-                        
-                        // 2. The text to show on hover
-                        widget::text(settings_text).size(14), 
-                        
-                        // 3. Where the tooltip should appear
+                        widget::text(fl!("settings-button")).size(14),
                         widget::tooltip::Position::Top,
                     )
                 )
@@ -511,9 +501,6 @@ impl AppModel {
                         &entry.description,
                         widget::row()
                             .spacing(8)
-                            // .push(
-                            //     widget::icon::from_name(icons::get_boot_entry_icon(&entry.description)).size(16)
-                            // )
                             .push(
                                 widget::toggler(is_visible)
                                     .on_toggle(move |_| Message::ToggleEntryVisibility(entry_id)),
