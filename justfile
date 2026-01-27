@@ -11,6 +11,7 @@ appdata-dst := base-dir / 'share' / 'appdata' / appid + '.metainfo.xml'
 bin-dst := base-dir / 'bin' / name
 desktop-dst := base-dir / 'share' / 'applications' / appid + '.desktop'
 icon-dst := base-dir / 'share' / 'icons' / 'hicolor' / 'scalable' / 'apps' / appid + '.svg'
+policy-dst := base-dir / 'share' / 'polkit-1' / 'actions' / appid + '.policy'
 
 # Default recipe which runs `just build-release`
 default: build-release
@@ -53,10 +54,11 @@ install:
     install -Dm0644 resources/app.desktop {{desktop-dst}}
     install -Dm0644 resources/app.metainfo.xml {{appdata-dst}}
     install -Dm0644 resources/icon.svg {{icon-dst}}
+    install -Dm0644 resources/com.github.cosmic_ext.restartTo.policy {{policy-dst}}
 
 # Uninstalls installed files
 uninstall:
-    rm {{bin-dst}} {{desktop-dst}} {{icon-dst}}
+    rm {{bin-dst}} {{desktop-dst}} {{icon-dst}} {{policy-dst}}
 
 # Vendor dependencies locally
 vendor:

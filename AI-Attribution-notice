@@ -8,22 +8,25 @@
 # |   Human contact:                                        |
 # |     • Marius Herget  < code@mariusherget.de >           |
 # |                                                         |
-# |  📅  Date: 2025-01-27                                   |
+# |  📅  Date: 2026-01-21                                   |
 # |                                                         |
-# |  🛠  Build mission: "Operation: Boot Entry Booty Call" |
-# |      Mission: Infiltrate the EFI firmware matrix,      |
-# |      decode the ancient UEFI hieroglyphs, and create   |
-# |      a cosmic applet that lets users reboot into       |
-# |      different operating systems faster than you can    |
-# |      say 'sudo reboot'. Successfully navigated the     |
-# |      treacherous waters of efibootnext API changes,    |
-# |      battled cosmic Task API dragons, and emerged      |
-# |      victorious with a working restart-to applet that   |
-# |      would make even systemd-logind jealous. All while |
-# |      avoiding the dreaded 'permission denied' kraken   |
-# |      and the 'compilation error' hydra. Mission        |
-# |      status: COMPLETE ✅ (but the real test is if it   |
-# |      actually reboots without bricking the system)     |
+# |  🛠  Build mission: "Operation: Polkit Permission Pass" |
+# |      Mission: Infiltrate the polkit authorization      |
+# |      fortress and integrate interactive privilege       |
+# |      elevation into the restart-to applet. Successfully |
+# |      integrated zbus_polkit to request authorization    |
+# |      via D-Bus, allowing users to authenticate with    |
+# |      their password instead of running the entire       |
+# |      applet as root. Created polkit policy file,        |
+# |      updated installation scripts, and transformed      |
+# |      the synchronous set_boot_next into an async        |
+# |      function that gracefully handles authorization     |
+# |      requests. The applet now prompts users for         |
+# |      authentication when needed, making it both more    |
+# |      secure and user-friendly. Mission status:          |
+# |      COMPLETE ✅ (polkit integration successful,        |
+# |      no more "permission denied" errors when policy     |
+# |      is properly installed)                             |
 # +---------------------------------------------------------+
 #
 # The development process involved iterative generation,

@@ -1,12 +1,10 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<svg viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
-  <!-- Reboot/Restart icon - circular arrow -->
-  <circle cx="64" cy="64" r="56" fill="none" stroke="currentColor" stroke-width="8"/>
-  <path d="M 64 20 L 64 40 M 64 88 L 64 108 M 44 64 L 24 64 M 84 64 L 104 64 M 44 44 L 28 28 M 84 84 L 100 100 M 84 44 L 100 28 M 44 84 L 28 100" 
-        stroke="currentColor" stroke-width="6" stroke-linecap="round"/>
-  <!-- Circular arrow indicating reboot -->
-  <path d="M 80 48 Q 96 64 80 80" 
-        fill="none" stroke="currentColor" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M 75 70 L 80 80 L 85 70" 
-        fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g clip-path="url(#clip0_409_3598)">
+<path d="M8 1.97198C7.73478 1.97198 7.48043 2.07734 7.29289 2.26488C7.10536 2.45241 7 2.70677 7 2.97198C7 3.2372 7.10536 3.49156 7.29289 3.67909C7.48043 3.86663 7.73478 3.97198 8 3.97198C9.06087 3.97198 10.0783 4.39341 10.8284 5.14356C11.5786 5.8937 12 6.91112 12 7.97198H10L13 11.972L16 7.97198H14C14 6.38069 13.3679 4.85456 12.2426 3.72934C11.1174 2.60413 9.5913 1.97198 8 1.97198ZM3 3.97198L0 7.97198H2C2 9.56328 2.63214 11.0894 3.75736 12.2146C4.88258 13.3398 6.4087 13.972 8 13.972C8.26522 13.972 8.51957 13.8666 8.70711 13.6791C8.89464 13.4916 9 13.2372 9 12.972C9 12.7068 8.89464 12.4524 8.70711 12.2649C8.51957 12.0773 8.26522 11.972 8 11.972C6.93913 11.972 5.92172 11.5506 5.17157 10.8004C4.42143 10.0503 4 9.03285 4 7.97198H6L3 3.97198Z" fill="#ffffff"/>
+</g>
+<defs>
+<clipPath id="clip0_409_3598">
+<rect width="16" height="16" fill="white"/>
+</clipPath>
+</defs>
 </svg>

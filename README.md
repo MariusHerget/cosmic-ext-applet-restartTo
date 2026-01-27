@@ -60,7 +60,8 @@ Before developing, ensure you have the following installed:
 5. **EFI system access**: The applet requires access to EFI variables. Ensure:
    - You're running on a UEFI system (not legacy BIOS)
    - `/sys/firmware/efi/efivars` is mounted (usually automatic)
-   - You have appropriate permissions (may require root or polkit policies)
+   - `efibootmgr` is installed: `sudo apt install efibootmgr`
+   - You have appropriate permissions (polkit policy is installed automatically with `just install`)
 
 ### Building
 
@@ -171,12 +172,59 @@ If you need to test the actual reboot functionality:
 
 ### Debugging
 
+#### Logging to journalctl
+
+The applet logs all events, errors, and debug information to `journalctl`. Logs are automatically captured by systemd when running as a service, or can be viewed manually.
+
+**View applet logs:**
+```sh
+# View recent logs
+journalctl -u cosmic-panel -n 100 | grep restart-to
+
+# Follow logs in real-time
+journalctl -u cosmic-panel -f | grep restart-to
+
+# View logs with timestamps
+journalctl -u cosmic-panel --since "1 hour ago" | grep restart-to
+
+# View only errors
+journalctl -u cosmic-panel -p err | grep restart-to
+```
+
+**When running manually:**
+```sh
+# Logs go to stderr, which can be captured
+RUST_LOG=debug just run 2>&1 | tee applet.log
+
+# Or view in journalctl if running as user service
+journalctl --user -f | grep restart-to
+```
+
 #### Enable Debug Logging
 
-Run with full backtraces and logging:
+Set the `RUST_LOG` environment variable to control log levels:
 ```sh
+# Debug level (most verbose)
+RUST_LOG=debug just run
+
+# Info level (default)
+RUST_LOG=info just run
+
+# Warning and errors only
+RUST_LOG=warn just run
+
+# Errors only
+RUST_LOG=error just run
+
+# With backtraces
 RUST_BACKTRACE=full RUST_LOG=debug just run
 ```
+
+**Log levels used:**
+- `error!` - Critical errors (permission denied, EFI access failures, reboot failures)
+- `warn!` - Warnings (config errors, skipped boot entries)
+- `info!` - Important events (applet start, boot entry selection, reboot initiation)
+- `debug!` - Detailed debugging (popup open/close, config updates, D-Bus connections)
 
 #### Common Issues
 
@@ -192,12 +240,13 @@ RUST_BACKTRACE=full RUST_LOG=debug just run
 
 3. **Permission denied errors**:
    - **Error message**: "Permission denied: EFI variable access requires elevated privileges"
-   - **Cause**: Setting BootNext EFI variable requires root privileges
+   - **Cause**: Setting BootNext EFI variable requires elevated privileges
    - **Solutions**:
-     - **Option 1 (Recommended)**: Create a polkit policy (see Permissions section below)
-     - **Option 2**: Test with `sudo efibootmgr -n <entry>` to verify EFI access works
-     - **Option 3**: Add user to a group with EFI access (if configured on your system)
-   - The applet will display a helpful error message with instructions when this occurs
+     - **Option 1 (Recommended)**: Ensure polkit policy is installed (`just install` installs it automatically)
+     - **Option 2**: Verify polkit service is running: `systemctl status polkit`
+     - **Option 3**: Ensure you have a polkit authentication agent (usually provided by your desktop environment)
+     - **Option 4**: Test with `sudo efibootmgr -n <entry>` to verify EFI access works
+   - The applet will automatically request polkit authorization and prompt for your password when needed
 
 4. **Build errors**:
    - Ensure all dependencies are installed
@@ -206,68 +255,83 @@ RUST_BACKTRACE=full RUST_LOG=debug just run
 
 ### Permissions
 
-The applet needs access to EFI variables, which typically requires elevated privileges. When you encounter a "Permission denied" error, here are your options:
+The applet needs access to EFI variables, which typically requires elevated privileges. The applet now uses **polkit** to request authorization interactively, allowing users to authenticate when needed without running the entire applet as root.
 
-#### Option 1: Polkit Policy (Recommended)
+#### Polkit Integration
 
-Create a polkit policy file to allow EFI variable access without requiring sudo:
+The applet uses `pkexec` to run `efibootmgr` with elevated privileges. When you select a boot entry and confirm the reboot:
 
-1. **Create the policy file**:
+1. **Polkit authorization prompt**: `pkexec` will prompt you to authenticate (enter your password) via your system's authentication agent
+2. **Authorization check**: Polkit verifies authorization using the installed policy
+3. **EFI variable access**: If authorized, `efibootmgr` sets the BootNext EFI variable with elevated privileges
+
+**Runtime dependency**: The applet requires `efibootmgr` to be installed:
+```bash
+sudo apt install efibootmgr
+```
+
+#### Installing the Polkit Policy
+
+The polkit policy file is automatically installed when you run `just install`. The policy file is located at:
+```
+/usr/share/polkit-1/actions/com.github.cosmic_ext.restartTo.policy
+```
+
+**Manual installation** (if needed):
+```bash
+sudo cp resources/com.github.cosmic_ext.restartTo.policy /usr/share/polkit-1/actions/
+```
+
+**Verify polkit service is running**:
+```bash
+systemctl status polkit
+```
+
+#### Troubleshooting Permission Issues
+
+If you encounter permission errors:
+
+1. **Verify polkit policy is installed**:
    ```bash
-   sudo nano /usr/share/polkit-1/actions/com.github.cosmic_ext.restartTo.policy
+   ls -la /usr/share/polkit-1/actions/com.github.cosmic_ext.restartTo.policy
    ```
 
-2. **Add the following content**:
-   ```xml
-   <?xml version="1.0" encoding="UTF-8"?>
-   <!DOCTYPE policyconfig PUBLIC
-     "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
-     "http://www.freedesktop.org/software/polkit/policyconfig-1.dtd">
-   <policyconfig>
-     <action id="com.github.cosmic_ext.restartTo.manage-boot">
-       <description>Manage EFI boot entries for restart-to applet</description>
-       <message>Authentication is required to manage boot entries</message>
-       <defaults>
-         <allow_any>auth_admin</allow_any>
-         <allow_inactive>auth_admin</allow_inactive>
-         <allow_active>auth_admin</allow_active>
-       </defaults>
-     </action>
-   </policyconfig>
+2. **Check polkit service**:
+   ```bash
+   systemctl status polkit
    ```
 
-3. **Note**: This policy alone may not be sufficient. The applet also needs to use polkit to request authorization. Currently, the applet uses direct EFI access which requires root. A future enhancement could integrate polkit authorization.
+3. **Verify authentication agent**: Ensure you have a polkit authentication agent running (most desktop environments provide this automatically)
 
-#### Option 2: Test EFI Access
+4. **Ensure efibootmgr is installed**:
+   ```bash
+   # Check if efibootmgr is installed
+   which efibootmgr
+   
+   # Install if missing
+   sudo apt install efibootmgr
+   ```
 
-Verify that EFI access works with root privileges:
-```bash
-# List boot entries
-sudo efibootmgr -v
+5. **Test EFI access manually**:
+   ```bash
+   # List boot entries
+   sudo efibootmgr -v
+   
+   # Test setting BootNext (replace 0001 with your boot entry ID)
+   sudo efibootmgr -n 0001
+   ```
 
-# Test setting BootNext (replace 0001 with your boot entry ID)
-sudo efibootmgr -n 0001
+6. **Check logs**: View applet logs to see detailed error messages:
+   ```bash
+   journalctl -u cosmic-panel -f | grep restart-to
+   ```
 
-# Verify it was set
-sudo efibootmgr -v
-```
+#### Fallback Behavior
 
-#### Option 3: Group Membership (If Available)
-
-Some systems configure group-based EFI access. Check if your distribution provides this:
-```bash
-# Check EFI variable permissions
-ls -la /sys/firmware/efi/efivars/ | head
-
-# Check if there's an EFI-related group
-groups
-```
-
-#### Current Limitation
-
-**Important**: The current implementation requires root privileges to set EFI variables. The applet will display a clear error message when permission is denied, guiding users to check the README for solutions.
-
-**Future Enhancement**: The applet could be enhanced to use polkit to request authorization interactively, similar to how `pkexec` works, but this requires additional integration work.
+If polkit authorization fails or is unavailable, the applet will still attempt direct EFI access. This may work if:
+- Your user has direct EFI variable access (uncommon)
+- You're running the applet with elevated privileges (not recommended)
+- Your system has group-based EFI access configured
 
 ### Code Quality
 

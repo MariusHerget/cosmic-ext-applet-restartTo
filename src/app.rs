@@ -83,19 +83,26 @@ impl cosmic::Application for AppModel {
             core,
             config: cosmic_config::Config::new(Self::APP_ID, Config::VERSION)
                 .map(|context| match Config::get_entry(&context) {
-                    Ok(config) => config,
-                    Err((_errors, config)) => {
-                        // for why in errors {
-                        //     tracing::error!(%why, "error loading app config");
-                        // }
-
+                    Ok(config) => {
+                        tracing::debug!("Successfully loaded app configuration");
+                        config
+                    }
+                    Err((errors, config)) => {
+                        for why in &errors {
+                            tracing::error!(%why, "error loading app config");
+                        }
+                        tracing::warn!("Using default configuration due to errors");
                         config
                     }
                 })
-                .unwrap_or_default(),
+                .unwrap_or_else(|e| {
+                    tracing::error!(error = %e, "Failed to create config context, using defaults");
+                    Config::default()
+                }),
             ..Default::default()
         };
 
+        tracing::info!("Applet initialized, loading boot entries");
         // Load boot entries on initialization
         (app, Task::perform(
             async { Message::LoadBootEntries },
@@ -234,10 +241,10 @@ impl cosmic::Application for AppModel {
             self.core()
                 .watch_config::<Config>(Self::APP_ID)
                 .map(|update| {
-                    // for why in update.errors {
-                    //     tracing::error!(?why, "app config error");
-                    // }
-
+                    for why in &update.errors {
+                        tracing::error!(%why, "app config error");
+                    }
+                    tracing::debug!("Configuration updated");
                     Message::UpdateConfig(update.config)
                 }),
         ])
@@ -257,6 +264,7 @@ impl cosmic::Application for AppModel {
                 self.config = config;
             }
             Message::LoadBootEntries => {
+                tracing::debug!("Loading boot entries");
                 self.loading_entries = true;
                 self.error_message = None;
                 return Task::perform(
@@ -268,58 +276,81 @@ impl cosmic::Application for AppModel {
                 self.loading_entries = false;
                 match result {
                     Ok(entries) => {
+                        tracing::info!(count = entries.len(), "Boot entries loaded successfully");
                         self.boot_entries = entries;
                         self.error_message = None;
                     }
                     Err(e) => {
+                        tracing::error!(error = %e, "Failed to load boot entries");
                         self.error_message = Some(e);
                         self.boot_entries.clear();
                     }
                 }
             }
             Message::SelectBootEntry(entry) => {
+                tracing::info!(
+                    boot_entry_id = entry.id,
+                    description = %entry.description,
+                    "User selected boot entry"
+                );
                 self.selected_entry = Some(entry);
             }
             Message::ConfirmReboot => {
                 if let Some(ref entry) = self.selected_entry {
                     let entry_id = entry.id;
-                    // Set BootNext and reboot
-                    match crate::boot::set_boot_next(entry_id) {
-                        Ok(()) => {
-                            // Spawn async task to reboot
-                            return Task::perform(
-                                async move {
+                    tracing::info!(
+                        boot_entry_id = entry_id,
+                        description = %entry.description,
+                        "User confirmed reboot to boot entry"
+                    );
+                    // Set BootNext and reboot (both are async now)
+                    return Task::perform(
+                        async move {
+                            // First set BootNext with polkit authorization
+                            match crate::boot::set_boot_next(entry_id).await {
+                                Ok(()) => {
+                                    tracing::info!("BootNext set successfully, initiating reboot");
+                                    // Then reboot
                                     crate::boot::reboot_system().await
-                                },
-                                |result| match result {
-                                    Ok(()) => cosmic::Action::App(Message::TogglePopup),
-                                    Err(e) => cosmic::Action::App(Message::RebootError(
-                                        format!("{}: {}", fl!("error-reboot"), e),
-                                    )),
-                                },
-                            );
-                        }
-                        Err(e) => {
-                            self.error_message = Some(format!("{}: {}", fl!("error-reboot"), e));
-                            self.selected_entry = None;
-                        }
-                    }
+                                }
+                                Err(e) => Err(e),
+                            }
+                        },
+                        |result| match result {
+                            Ok(()) => {
+                                tracing::info!("Reboot initiated successfully");
+                                cosmic::Action::App(Message::TogglePopup)
+                            }
+                            Err(e) => {
+                                tracing::error!(error = %e, "Failed to set BootNext or reboot");
+                                cosmic::Action::App(Message::RebootError(
+                                    format!("{}: {}", fl!("error-reboot"), e),
+                                ))
+                            }
+                        },
+                    );
+                } else {
+                    tracing::warn!("ConfirmReboot received but no entry selected");
                 }
             }
             Message::CancelReboot => {
+                tracing::debug!("User cancelled reboot");
                 self.selected_entry = None;
             }
             Message::RebootError(error) => {
+                tracing::error!(error = %error, "Reboot error occurred");
                 self.error_message = Some(error);
                 self.selected_entry = None;
             }
             Message::TogglePopup => {
                 return if let Some(p) = self.popup.take() {
                     // Close popup and clear selection
+                    tracing::debug!("Closing applet popup");
                     self.selected_entry = None;
                     destroy_popup(p)
                 } else {
                     // Open popup and load boot entries if not already loaded
+                    tracing::debug!("Opening applet popup");
                     let new_id = Id::unique();
                     self.popup.replace(new_id);
                     let mut popup_settings = self.core.applet.get_popup_settings(
@@ -336,6 +367,7 @@ impl cosmic::Application for AppModel {
                         .max_height(1080.0);
                     // Load boot entries when opening popup
                     if self.boot_entries.is_empty() && !self.loading_entries {
+                        tracing::debug!("Boot entries empty, loading on popup open");
                         return Task::batch(vec![
                             get_popup(popup_settings),
                             Task::perform(
@@ -349,6 +381,7 @@ impl cosmic::Application for AppModel {
             }
             Message::PopupClosed(id) => {
                 if self.popup.as_ref() == Some(&id) {
+                    tracing::debug!("Popup closed by user");
                     self.popup = None;
                     self.selected_entry = None;
                 }
