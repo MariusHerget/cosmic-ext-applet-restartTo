@@ -10,20 +10,18 @@
 # |                                                         |
 # |  📅  Date: 2026-01-27                                   |
 # |                                                         |
-# |  🛠  Build mission: "Operation: Regex Extermination"   |
-# |      Mission: Banish the regex demons from the codebase! |
-# |      After discovering that the regex-based SVG color   |
-# |      manipulation was causing theme integration failures,|
-# |      we embarked on a quest to use the proper API       |
-# |      methods. The simpleicons-rs crate's slug_colored() |
-# |      function was the key - it accepts "currentColor"   |
-# |      directly, making icons theme-aware without any      |
-# |      string manipulation! For Font Awesome, we switched |
-# |      to simple string replacement (no regex needed).    |
-# |      The regex crate has been completely removed, and    |
-# |      icons now properly integrate with the UI theme     |
-# |      using the official crate APIs. Mission status:     |
-# |      COMPLETE ✅ (regex banished, proper APIs used)    |
+# |  🛠  Build mission: "Operation: Code Cleanup Crusade"  |
+# |      Mission: Purge the codebase of digital debris!    |
+# |      Like a digital Marie Kondo, we systematically      |
+# |      removed all commented-out code blocks that no      |
+# |      longer sparked joy. Unused variables were          |
+# |      eliminated, dead functions were given proper       |
+# |      burials (or marked for future resurrection), and   |
+# |      unnecessary clones were optimized away. The         |
+# |      HashMap creation was streamlined, and all the      |
+# |      code clutter was swept into the void. Mission      |
+# |      status: COMPLETE ✅ (codebase now sparkles with   |
+# |      cleanliness and efficiency)                        |
 # +---------------------------------------------------------+
 #
 # The development process involved iterative generation,

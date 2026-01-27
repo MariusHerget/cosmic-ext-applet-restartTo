@@ -152,14 +152,11 @@ impl cosmic::Application for AppModel {
         // Show confirmation dialog if an entry is selected
         if let Some(ref entry) = self.selected_entry {
             let dialog_content = widget::column()
-                .spacing(16)
-                .padding(24)
+                .spacing(12)
+                .padding([16, 20])
                 .push(
                     widget::text({
-                        use std::collections::HashMap;
-                        let mut args = HashMap::new();
-                        args.insert("entry", entry.description.as_str());
-                        fl!("confirm-restart", args)
+                        fl!("confirm-restart", [("entry", entry.description.as_str())].into_iter().collect())
                     })
                         .size(16),
                 )
@@ -183,9 +180,10 @@ impl cosmic::Application for AppModel {
             return self.view_settings().into();
         }
 
-        let content_list = widget::list_column()
-            .padding(5)
-            .spacing(0);
+        let content_list = widget::settings::section();
+        
+            // .padding([4, 2])
+            // .spacing(0);
 
         let content_list = if self.loading_entries {
             content_list.add(
@@ -208,7 +206,7 @@ impl cosmic::Application for AppModel {
                     .add(
                         widget::column()
                             .spacing(4)
-                            .padding([8, 16])
+                            .padding([8, 12])
                             .push(widget::text(error).size(10)),
                     )
             } else {
@@ -229,31 +227,23 @@ impl cosmic::Application for AppModel {
         } else {
             let mut list = content_list;
             // Filter entries based on visibility settings
+            list = list.add(widget::text(fl!("settings-title")).size(16));
             for entry in &self.boot_entries {
                 if self.config.is_entry_visible(entry.id) {
                     let entry_clone = entry.clone();
                     let icon_handle = icons::get_boot_entry_icon(&entry.description, &self.core);
-                    let entry_text = format!("{}", entry.description);
-                    let entry_text_clone = entry_text.clone();
              
                     list = list.add(
-                        widget::button::text(entry_text_clone)
+                        widget::button::text(entry.description.clone())
                             .leading_icon(icon_handle)
                             .on_press(Message::SelectBootEntry(entry_clone))
-                            .spacing(12),
+                            .spacing(12)
+                            .padding([0, 0]),
                     );
                 }
             }
             // Add settings button as last item
-            let settings_text = format!("{}", fl!("settings-button"));
-            let settings_text_clone = settings_text.clone();
-            // list = list.add(
-            //     widget::button::text(settings_text_clone)
-            //         .leading_icon(widget::icon::from_name("emblem-system-symbolic").size(16))
-            //         .class(theme::Button::HeaderBar)
-            //         .on_press(Message::OpenSettings)
-            //         .spacing(12),
-            // );
+            let settings_text = fl!("settings-button").to_string();
             list = list.add(
                 widget::container(
                     widget::tooltip(
@@ -265,13 +255,14 @@ impl cosmic::Application for AppModel {
                         .class(theme::Button::HeaderBar),
                         
                         // 2. The text to show on hover
-                        widget::text(settings_text_clone).size(14), 
+                        widget::text(settings_text).size(14), 
                         
                         // 3. Where the tooltip should appear
                         widget::tooltip::Position::Top,
                     )
                 )
                 .width(cosmic::iced::Length::Fill)
+                .padding([0, 0])
                 .align_x(cosmic::iced::alignment::Alignment::End),
             );
             list
@@ -320,7 +311,7 @@ impl cosmic::Application for AppModel {
     fn update(&mut self, message: <AppModel as cosmic::Application>::Message) -> Task<cosmic::Action<<AppModel as cosmic::Application>::Message>> {
         match message {
             Message::SubscriptionChannel => {
-                // For example purposes only.
+                // Subscription channel message handler (kept for future use)
             }
             Message::UpdateConfig(config) => {
                 self.config = config;
@@ -453,7 +444,7 @@ impl cosmic::Application for AppModel {
                         None,
                     );
                     popup_settings.positioner.size_limits = Limits::NONE
-                        .max_width(372.0)
+                        .max_width(320.0)
                         .min_width(200.0)
                         .min_height(200.0)
                         .max_height(1080.0);
@@ -492,7 +483,7 @@ impl AppModel {
     /// Render the settings view
     fn view_settings(&self) -> Element<'_, <AppModel as cosmic::Application>::Message> {
         let content_list = widget::list_column()
-            .padding(5)
+            .padding(0)
             .spacing(0);
 
         let mut list = content_list

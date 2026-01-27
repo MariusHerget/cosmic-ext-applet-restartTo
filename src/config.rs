@@ -32,9 +32,4 @@ impl Config {
             self.hidden_entries.insert(entry_id);
         }
     }
-
-    /// Check if an entry is hidden
-    pub fn is_entry_hidden(&self, entry_id: u16) -> bool {
-        self.hidden_entries.contains(&entry_id)
-    }
 }

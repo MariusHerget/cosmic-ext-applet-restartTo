@@ -197,7 +197,6 @@ pub async fn reboot_system() -> Result<(), String> {
             tracing::error!(error = %e, "Failed to call Reboot method on systemd-logind");
             format!("Failed to call Reboot method: {}", e)
         })?;
-    // Note: call_method returns a Message, but we don't need to use it
 
     tracing::info!("Reboot command sent successfully to systemd-logind");
     Ok(())
